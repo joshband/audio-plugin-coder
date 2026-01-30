@@ -1,0 +1,335 @@
+# .agent\troubleshooting\known-issues.yaml
+issues:
+  - id: cmake-001
+    title: "CMake duplicate target error with JUCE modules"
+    category: build
+    severity: high
+    symptoms:
+      - "CMake Error: add_library cannot create target"
+      - "Target 'juce_core' already exists"
+    error_patterns:
+      - "duplicate target"
+      - "juce_add_modules"
+    resolution_status: solved
+    resolution_file: resolutions/cmake-duplicate-target.md
+    frequency: 8
+    last_occurred: 2026-01-22
+    
+  - id: webview-001
+    title: "WebView HTML files not loading - path issue"
+    category: webview
+    severity: medium
+    symptoms:
+      - "Blank white screen in plugin"
+      - "Failed to load resource"
+    error_patterns:
+      - "404 in WebView"
+      - "getResourceProviderRoot"
+    resolution_status: solved
+    resolution_file: resolutions/webview-path-error.md
+    frequency: 5
+    last_occurred: 2026-01-20
+    
+  - id: webview-002
+    title: "DAW crashes when unloading WebView plugin - member order"
+    category: webview
+    severity: critical
+    symptoms:
+      - "DAW crashes when closing plugin window"
+      - "Segmentation fault on plugin destructor"
+      - "Access violation in WebBrowserComponent destructor"
+      - "Crash only happens in release builds, not debug"
+      - "Crash during plugin unload or project close"
+    error_patterns:
+      - "Access violation"
+      - "Segmentation fault"
+      - "invalid memory access"
+      - "pure virtual function call"
+      - "0xC0000005: Access violation"
+    root_cause: "Member declaration order causes WebBrowserComponent to be destroyed after WebSliderRelay objects it references"
+    resolution_status: solved
+    resolution_file: resolutions/webview-member-order-crash.md
+    frequency: 1
+    last_occurred: 2026-01-24
+    attempts_before_resolution: 1
+    prevention: "Always declare members in order: Relays → WebView → Attachments"
+
+  - id: vst3-002
+    title: "VST3 not appearing in DAW after build"
+    category: packaging
+    severity: medium
+    symptoms:
+      - "Plugin builds but DAW doesn't see it"
+      - "VST3 folder exists but empty in DAW"
+    error_patterns:
+      - "VST3 not found"
+      - "rescan doesn't detect"
+    resolution_status: solved
+    resolution_file: resolutions/vst3-install-failed.md
+    frequency: 12
+    last_occurred: 2026-01-22
+
+  - id: build-003
+    title: "Permission denied when copying VST3 to Program Files"
+    category: build
+    severity: low
+    symptoms:
+      - "Plugin compiles successfully but fails during install step"
+      - "Permission denied when copying to C:\\Program Files\\Common Files\\VST3"
+      - "Build completes but VST3 not installed"
+    error_patterns:
+      - "Permission denied"
+      - "file INSTALL cannot make directory"
+      - "C:\\Program Files\\Common Files/VST3"
+    root_cause: "Windows requires administrator privileges to write to Program Files directory"
+    resolution_status: solved
+    resolution_file: resolutions/vst3-permission-denied.md
+    frequency: 1
+    last_occurred: 2026-01-24
+    attempts_before_resolution: 0
+    prevention: "Run build script as administrator or manually copy VST3 from build directory"
+
+  - id: webview-003
+    title: "WebView plugin crashes on load - runtime crash"
+    category: webview
+    severity: critical
+    symptoms:
+      - "Plugin crashes immediately when opened in DAW"
+      - "Standalone version crashes on launch"
+      - "No error message, just crash"
+      - "Build succeeds but plugin crashes at runtime"
+      - "WebView2 destructor message appears in logs"
+    error_patterns:
+      - "Access violation"
+      - "Crash on plugin window open"
+      - "WebView2 not found"
+      - "EplDispatchQueue destructor"
+    root_cause: "Multiple possible causes: WebView2 runtime missing, resource provider issues, initialization order problems, standalone audio device issues"
+    resolution_status: solved
+    resolution_file: resolutions/webview-runtime-crash.md
+    frequency: 1
+    last_occurred: 2026-01-24
+    attempts_before_resolution: 3
+    prevention: "Test VST3 in DAW first (more stable than standalone), check WebView2 runtime installed, verify resource provider"
+    notes: "Resolved - was caused by webview-004 (attachment order). See webview-004 for the actual fix."
+
+  - id: webview-004
+    title: "WebView plugin crashes DAW - addAndMakeVisible called before attachments"
+    category: webview
+    severity: critical
+    symptoms:
+      - "Plugin crashes entire DAW when loaded"
+      - "Standalone crashes immediately on launch"
+      - "No error message, instant crash"
+      - "Build succeeds perfectly"
+      - "WebView2 runtime is installed"
+    error_patterns:
+      - "DAW crash on plugin load"
+      - "Instant crash with no error"
+      - "Access violation in parameter access"
+    root_cause: "addAndMakeVisible(webView) called BEFORE parameter attachments created. WebView initializes and tries to access attachments that don't exist yet → null pointer crash"
+    resolution_status: solved
+    resolution_file: resolutions/webview-attachment-order-crash.md
+    frequency: 1
+    last_occurred: 2026-01-24
+    attempts_before_resolution: 3
+    prevention: "ALWAYS create ALL parameter attachments BEFORE calling addAndMakeVisible(webView)"
+    critical_fix: "Order must be: 1. Relays 2. WebView 3. Attachments 4. addAndMakeVisible 5. goToURL 6. setSize"
+    notes: "This is the #1 most critical WebView bug. Following AngelGrain pattern prevents this entirely."
+
+  - id: webview-005
+    title: "JUCE 8 WebView API - withUserDataFolder not a member of Options"
+    category: webview
+    severity: high
+    symptoms:
+      - "Compilation error: 'withUserDataFolder' is not a member of 'juce::WebBrowserComponent::Options'"
+      - "Build fails in PluginEditor.cpp"
+      - "Cannot convert from initializer list to WebBrowserComponent::Resource"
+    error_patterns:
+      - "withUserDataFolder"
+      - "is not a member"
+      - "C2039"
+    root_cause: "JUCE 8 API change: withUserDataFolder is not directly on Options class, it's on the nested WinWebView2 class"
+    resolution_status: solved
+    resolution_file: resolutions/webview-juce8-api-changes.md
+    frequency: 1
+    last_occurred: 2026-01-25
+    attempts_before_resolution: 3
+    prevention: "Use withWinWebView2Options(WinWebView2{}.withUserDataFolder(...)) instead"
+
+  - id: webview-006
+    title: "JUCE 8 WebView API - Resource requires std::vector<std::byte> not MemoryBlock"
+    category: webview
+    severity: high
+    symptoms:
+      - "Cannot convert from 'juce::MemoryBlock' to 'std::vector<std::byte>'"
+      - "Invalid aggregate initialization for WebBrowserComponent::Resource"
+      - "C2440 conversion error"
+    error_patterns:
+      - "cannot convert from 'juce::MemoryBlock'"
+      - "std::vector<std::byte>"
+      - "WebBrowserComponent::Resource"
+    root_cause: "JUCE 8 API change: Resource struct data field is now std::vector<std::byte> instead of MemoryBlock"
+    resolution_status: solved
+    resolution_file: resolutions/webview-juce8-api-changes.md
+    frequency: 1
+    last_occurred: 2026-01-25
+    attempts_before_resolution: 2
+    prevention: "Convert file data to std::vector<std::byte> before returning Resource"
+
+  - id: build-004
+    title: "JuceHeader.h not found - JUCE 8 migration"
+    category: build
+    severity: high
+    symptoms:
+      - "Cannot open include file: 'JuceHeader.h'"
+      - "C1083: Cannot open include file"
+      - "Build fails immediately"
+    error_patterns:
+      - "JuceHeader.h"
+      - "No such file or directory"
+      - "Cannot open include file"
+    root_cause: "JUCE 8 removed JuceHeader.h convenience header. Must include modules directly."
+    resolution_status: solved
+    resolution_file: resolutions/juce8-header-migration.md
+    frequency: 1
+    last_occurred: 2026-01-25
+    attempts_before_resolution: 1
+    prevention: "Use direct module includes: #include <juce_audio_processors/juce_audio_processors.h> etc"
+
+  - id: webview-007
+    title: "WebView shows black screen - embedded resources not loaded"
+    category: webview
+    severity: high
+    symptoms:
+      - "Plugin loads in DAW but shows only black screen"
+      - "No UI elements visible"
+      - "WebView component is created but content doesn't load"
+      - "Works during development but fails in DAW"
+    error_patterns:
+      - "black screen"
+      - "blank webview"
+      - "resources not loading"
+    root_cause: "Resource provider trying to load from file system using getCurrentWorkingDirectory() which is different in DAW than during development. Embedded BinaryData resources not being used."
+    resolution_status: solved
+    resolution_file: resolutions/webview-black-screen-resources.md
+    frequency: 1
+    last_occurred: 2026-01-25
+    attempts_before_resolution: 1
+    prevention: "Always use embedded BinaryData resources for production builds. Include BinaryData.h and map URL paths to BinaryData variables."
+  - id: webview-008
+    title: 'ES6 Modules fail in WebView - JavaScript not loading'
+    category: webview
+    severity: critical
+    symptoms:
+      - 'Plugin loads but UI incomplete (only dots visible, no knob arcs)'
+      - 'No animations or interactivity'
+      - 'JavaScript fails with CORS errors in browser tests'
+      - 'WebView shows static HTML but no JavaScript execution'
+      - 'file:// protocol blocks module loading'
+    error_patterns:
+      - 'Cross-Origin Request blocked'
+      - 'CORS request not http'
+      - 'script type="module"'
+      - 'import * as'
+    root_cause: 'ES6 modules require HTTP/HTTPS protocol. WebView uses custom protocol (juce://) which blocks ES6 imports. All JavaScript must be inline in HTML.'
+    resolution_status: solved
+    resolution_file: resolutions/webview-es6-modules-fail.md
+    frequency: 2
+    last_occurred: 2026-01-26
+    attempts_before_resolution: 4
+    prevention: 'ALWAYS use inline JavaScript in index.html. No external JS files. Embed JUCE library directly.'
+    critical_fix: 'Convert all external JS to inline <script> blocks. Copy JUCE library from js/juce/index.js and inline it.'
+    notes: 'Resolved in CloudWash by creating 978-line index.html with all JavaScript inline. This is #1 WebView issue for new developers.'
+
+  - id: crash-001
+    title: "Plugin crashes on load - nullptr dereference from non-existent parameter"
+    category: build
+    severity: critical
+    symptoms:
+      - "Plugin crashes immediately when loaded in DAW"
+      - "Standalone crashes on launch"
+      - "Access violation in PluginEditor constructor"
+      - "Crash during parameter attachment creation"
+    error_patterns:
+      - "Access violation reading location"
+      - "nullptr dereference"
+      - "getParameter returned null"
+    root_cause: "Code attempts to create parameter attachment for parameter that doesn't exist in createParameterLayout(). Calling apvts.getParameter('non_existent') returns nullptr, then dereferencing it crashes."
+    resolution_status: solved
+    resolution_file: resolutions/crash-001-nullptr-parameter.md
+    frequency: 1
+    last_occurred: 2026-01-29
+    attempts_before_resolution: 1
+    prevention: "ALWAYS verify parameter exists in createParameterLayout() before creating attachments. Use consistent parameter naming."
+    critical_fix: "Remove any parameter attachments that reference non-existent parameters. Check all getParameter() calls match layout."
+    notes: "Found in CloudWash - blend_mode parameter attachment created but parameter never added to layout."
+
+  - id: performance-001
+    title: "Plugin causes audio dropouts - mutex blocking entire processBlock"
+    category: dsp
+    severity: high
+    symptoms:
+      - "Audio dropouts during playback"
+      - "Editor hangs when opened during processing"
+      - "PluginVal hangs at 'Open editor whilst processing' test"
+      - "High CPU usage in audio thread"
+    error_patterns:
+      - "processBlock timeout"
+      - "Editor creation timeout"
+      - "Lock contention"
+    root_cause: "std::lock_guard held for entire processBlock duration blocks other threads trying to access processor. Audio thread holds lock for ~10ms per block, preventing editor/parameter updates."
+    resolution_status: solved
+    resolution_file: resolutions/performance-001-mutex-blocking.md
+    frequency: 1
+    last_occurred: 2026-01-29
+    attempts_before_resolution: 2
+    prevention: "Only lock mutexes for minimal critical sections. Use atomics for thread-safe communication. Never hold locks during audio processing."
+    critical_fix: "Move mutex lock inside critical section only. Remove lock from processBlock scope. Use atomics for mode/quality changes."
+    notes: "Found in CloudWash - mutex locked at start of processBlock for entire 300+ line function. Fixed by locking only during Prepare() call."
+
+  - id: webview-009
+    title: "WebView plugin slow to initialize - takes 900ms+ to open editor"
+    category: webview
+    severity: medium
+    symptoms:
+      - "Plugin takes almost 1 second to open"
+      - "PluginVal times out on 'Open editor whilst processing' test"
+      - "Black screen for ~1 second before UI appears"
+      - "DAW feels sluggish when opening plugin"
+    error_patterns:
+      - "Open editor whilst processing timeout"
+      - "WebView initialization slow"
+      - "Time taken to open editor (cold): 900+ ms"
+    root_cause: "WebView2 runtime requires full Chromium initialization including process creation, IPC setup, and HTML/JS parsing. This is inherent to WebView2 architecture and cannot be avoided."
+    resolution_status: workaround
+    resolution_file: resolutions/webview-009-slow-initialization.md
+    frequency: 1
+    last_occurred: 2026-01-29
+    attempts_before_resolution: 0
+    prevention: "Accept as WebView2 limitation. Consider Visage for plugins requiring instant editor load. Use --skip-gui-tests flag for PluginVal."
+    workaround: "Use inline HTML/CSS/JS to minimize load time. Preload resources. Show loading indicator. Skip GUI tests in PluginVal if core DSP passes."
+    notes: "WebView2 cold start: ~941ms, warm start: ~344ms. This is acceptable for complex UIs but fails strict timing tests."
+
+  - id: crash-002
+    title: "CloudWash Access Violation crash (0xc0000005)"
+    category: crash
+    severity: critical
+    symptoms:
+      - "Plugin crashes immediately on launch"
+      - "No UI appears"
+      - "Access Violation exception"
+      - "Crash in Debug and Release builds"
+    error_patterns:
+      - "0xc0000005"
+      - "ACCESS_VIOLATION"
+      - "CloudWash.exe faulting"
+    root_cause: "INVESTIGATING - Access violation during initialization. Suspected: Clouds processor Init(), sample rate converter, or preset loading."
+    resolution_status: investigating
+    resolution_file: resolutions/crash-002-cloudwash-access-violation.md
+    frequency: 1
+    last_occurred: 2026-01-29
+    attempts_before_resolution: 5
+    prevention: "MUST run in Visual Studio debugger to identify exact crash location. Debug logging added but need debugger to see crash point."
+    critical_action_required: "Run: devenv /debugexe [path-to-CloudWash-Debug.exe] and share crash location + call stack"
+    notes: "Crash dump available at C:\\CrashDumps\\CloudWash.exe.*.dmp (133MB). Already fixed blend_mode nullptr, mutex blocking, timer safety - still crashes."

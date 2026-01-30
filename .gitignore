@@ -1,0 +1,48 @@
+# --- APC IGNORES ---
+
+# plugin folder
+plugins/AngelGrain
+plugins/gainknob
+
+# _tools folder
+_tools/DebugView/
+
+# Design Libraries (examples)
+design_library/_exclude/
+
+# Build Artifacts (The Dirty Zone)
+build/
+cmake-build-*/
+.vs/
+out/
+*.obj
+*.tlog
+*.pdb
+*.idb
+*.exe
+*.vst3
+*.lib
+*.exp
+
+# github
+github/
+
+# User Specific
+.vscode/
+*.user
+*.suo
+nul
+WEBVIEW_FRAMEWORK_ANALYSIS.md
+
+# System
+.DS_Store
+Thumbs.db
+
+# Logs & Crash Reports
+logs/
+APC_CRASH_REPORT.txt
+build_log.txt
+
+# Backups
+_backups/
+dist/

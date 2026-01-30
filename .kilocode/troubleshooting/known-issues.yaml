@@ -1,0 +1,138 @@
+# .agent\troubleshooting\known-issues.yaml
+issues:
+  - id: cmake-001
+    title: "CMake duplicate target error with JUCE modules"
+    category: build
+    severity: high
+    symptoms:
+      - "CMake Error: add_library cannot create target"
+      - "Target 'juce_core' already exists"
+    error_patterns:
+      - "duplicate target"
+      - "juce_add_modules"
+    resolution_status: solved
+    resolution_file: resolutions/cmake-duplicate-target.md
+    frequency: 8
+    last_occurred: 2026-01-22
+    
+  - id: webview-001
+    title: "WebView HTML files not loading - path issue"
+    category: webview
+    severity: medium
+    symptoms:
+      - "Blank white screen in plugin"
+      - "Failed to load resource"
+    error_patterns:
+      - "404 in WebView"
+      - "getResourceProviderRoot"
+    resolution_status: solved
+    resolution_file: resolutions/webview-path-error.md
+    frequency: 5
+    last_occurred: 2026-01-20
+    
+  - id: webview-002
+    title: "DAW crashes when unloading WebView plugin - member order"
+    category: webview
+    severity: critical
+    symptoms:
+      - "DAW crashes when closing plugin window"
+      - "Segmentation fault on plugin destructor"
+      - "Access violation in WebBrowserComponent destructor"
+      - "Crash only happens in release builds, not debug"
+      - "Crash during plugin unload or project close"
+    error_patterns:
+      - "Access violation"
+      - "Segmentation fault"
+      - "invalid memory access"
+      - "pure virtual function call"
+      - "0xC0000005: Access violation"
+    root_cause: "Member declaration order causes WebBrowserComponent to be destroyed after WebSliderRelay objects it references"
+    resolution_status: solved
+    resolution_file: resolutions/webview-member-order-crash.md
+    frequency: 1
+    last_occurred: 2026-01-24
+    attempts_before_resolution: 1
+    prevention: "Always declare members in order: Relays → WebView → Attachments"
+
+  - id: vst3-002
+    title: "VST3 not appearing in DAW after build"
+    category: packaging
+    severity: medium
+    symptoms:
+      - "Plugin builds but DAW doesn't see it"
+      - "VST3 folder exists but empty in DAW"
+    error_patterns:
+      - "VST3 not found"
+      - "rescan doesn't detect"
+    resolution_status: solved
+    resolution_file: resolutions/vst3-install-failed.md
+    frequency: 12
+    last_occurred: 2026-01-22
+
+  - id: build-003
+    title: "Permission denied when copying VST3 to Program Files"
+    category: build
+    severity: low
+    symptoms:
+      - "Plugin compiles successfully but fails during install step"
+      - "Permission denied when copying to C:\\Program Files\\Common Files\\VST3"
+      - "Build completes but VST3 not installed"
+    error_patterns:
+      - "Permission denied"
+      - "file INSTALL cannot make directory"
+      - "C:\\Program Files\\Common Files/VST3"
+    root_cause: "Windows requires administrator privileges to write to Program Files directory"
+    resolution_status: solved
+    resolution_file: resolutions/vst3-permission-denied.md
+    frequency: 1
+    last_occurred: 2026-01-24
+    attempts_before_resolution: 0
+    prevention: "Run build script as administrator or manually copy VST3 from build directory"
+
+  - id: webview-003
+    title: "WebView plugin crashes on load - runtime crash"
+    category: webview
+    severity: critical
+    symptoms:
+      - "Plugin crashes immediately when opened in DAW"
+      - "Standalone version crashes on launch"
+      - "No error message, just crash"
+      - "Build succeeds but plugin crashes at runtime"
+      - "WebView2 destructor message appears in logs"
+    error_patterns:
+      - "Access violation"
+      - "Crash on plugin window open"
+      - "WebView2 not found"
+      - "EplDispatchQueue destructor"
+    root_cause: "Multiple possible causes: WebView2 runtime missing, resource provider issues, initialization order problems, standalone audio device issues"
+    resolution_status: solved
+    resolution_file: resolutions/webview-runtime-crash.md
+    frequency: 1
+    last_occurred: 2026-01-24
+    attempts_before_resolution: 3
+    prevention: "Test VST3 in DAW first (more stable than standalone), check WebView2 runtime installed, verify resource provider"
+    notes: "Resolved - was caused by webview-004 (attachment order). See webview-004 for the actual fix."
+
+  - id: webview-004
+    title: "WebView plugin crashes DAW - addAndMakeVisible called before attachments"
+    category: webview
+    severity: critical
+    symptoms:
+      - "Plugin crashes entire DAW when loaded"
+      - "Standalone crashes immediately on launch"
+      - "No error message, instant crash"
+      - "Build succeeds perfectly"
+      - "WebView2 runtime is installed"
+    error_patterns:
+      - "DAW crash on plugin load"
+      - "Instant crash with no error"
+      - "Access violation in parameter access"
+    root_cause: "addAndMakeVisible(webView) called BEFORE parameter attachments created. WebView initializes and tries to access attachments that don't exist yet → null pointer crash"
+    resolution_status: solved
+    resolution_file: resolutions/webview-attachment-order-crash.md
+    frequency: 1
+    last_occurred: 2026-01-24
+    attempts_before_resolution: 3
+    prevention: "ALWAYS create ALL parameter attachments BEFORE calling addAndMakeVisible(webView)"
+    critical_fix: "Order must be: 1. Relays 2. WebView 3. Attachments 4. addAndMakeVisible 5. goToURL 6. setSize"
+    notes: "This is the #1 most critical WebView bug. Following AngelGrain pattern prevents this entirely."
