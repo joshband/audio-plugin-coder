@@ -26,6 +26,18 @@ APC is designed to be **Agent Agnostic**. Whether you use Google's Antigravity, 
 
 Use APC for development and experimentation purposes only until a stable release is announced.
 
+## Active Plugin Snapshot (LocusQ)
+
+Last updated: **2026-02-19**
+
+- Phase 2.9b CI evidence closeout status: parent-level automation is active through `locusq-qa-harness.yml` and `docs-freshness.yml`.
+- Submodule pointer: `plugins/LocusQ` -> `3f3ece8456fd0570ff4649e9222e4c83cdfb8e3f` (`submodule.plugins/LocusQ.branch=main`).
+- Source of truth for this snapshot: `plugins/LocusQ` (remote `git@github.com:joshband/LocusQ.git`, branch `main`).
+- Canonical implementation and validation state is tracked in:
+  - `plugins/LocusQ/status.json`
+  - `plugins/LocusQ/TestEvidence/build-summary.md`
+  - `plugins/LocusQ/TestEvidence/validation-trend.md`
+
 ## What is Audio Plugin Coder?
 
 **Audio Plugin Coder (APC)** is a structured, AI-driven workflow system that guides LLM agents through the entire audio plugin development lifecycle.
@@ -399,4 +411,3 @@ APC uses **JUCE 8** as its audio plugin framework. JUCE 8 is dual-licensed:
 **Built with ❤️ (and a lot of tokens) for the audio development community.**
 
 *Turn your plugin ideas into reality with the power of AI*
-

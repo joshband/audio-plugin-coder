@@ -1,0 +1,305 @@
+name: LocusQ QA Harness (Parent)
+
+on:
+  pull_request:
+    branches: [main, master, develop]
+    paths:
+      - "plugins/LocusQ"
+      - "plugins/LocusQ/**"
+      - "README.md"
+      - "CHANGELOG.md"
+      - "scripts/validate-docs-freshness.sh"
+      - ".github/workflows/locusq-qa-harness.yml"
+  push:
+    branches: [main, master, develop]
+    paths:
+      - "plugins/LocusQ"
+      - "plugins/LocusQ/**"
+      - "README.md"
+      - "CHANGELOG.md"
+      - "scripts/validate-docs-freshness.sh"
+      - ".github/workflows/locusq-qa-harness.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: locusq-parent-qa-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  docs-closeout-gate:
+    name: Docs Closeout Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          token: ${{ secrets.SUBMODULE_TOKEN != '' && secrets.SUBMODULE_TOKEN || github.token }}
+
+      - name: Validate parent + LocusQ docs freshness
+        run: |
+          chmod +x ./scripts/validate-docs-freshness.sh
+          ./scripts/validate-docs-freshness.sh
+
+  qa-critical:
+    name: QA Critical (${{ matrix.os }})
+    needs: docs-closeout-gate
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    timeout-minutes: 35
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          token: ${{ secrets.SUBMODULE_TOKEN != '' && secrets.SUBMODULE_TOKEN || github.token }}
+
+      - name: Checkout JUCE
+        uses: actions/checkout@v4
+        with:
+          repository: juce-framework/JUCE
+          path: JUCE
+
+      - name: Checkout QA harness
+        uses: actions/checkout@v4
+        with:
+          repository: joshband/audio-dsp-qa-harness
+          path: audio-dsp-qa-harness
+          token: ${{ secrets.SUBMODULE_TOKEN != '' && secrets.SUBMODULE_TOKEN || github.token }}
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libasound2-dev \
+            libjack-jackd2-dev \
+            libx11-dev \
+            libxcomposite-dev \
+            libxcursor-dev \
+            libxext-dev \
+            libxinerama-dev \
+            libxrandr-dev \
+            libxrender-dev \
+            libxkbcommon-dev \
+            libxkbcommon-x11-dev \
+            libx11-xcb-dev \
+            libfreetype6-dev \
+            libfontconfig1-dev
+
+      - name: Configure QA build
+        run: |
+          cmake -S plugins/LocusQ -B build-qa-locusq \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_LOCUSQ_QA=ON \
+            -DQA_HARNESS_DIR="${GITHUB_WORKSPACE}/audio-dsp-qa-harness" \
+            -DJUCE_DIR="${GITHUB_WORKSPACE}/JUCE"
+
+      - name: Build QA target
+        run: cmake --build build-qa-locusq --target locusq_qa -j 4
+
+      - name: Run critical suites + 4-channel matrix
+        run: |
+          set -euo pipefail
+          mkdir -p qa_output
+
+          LOCUSQ_QA_BIN="./build-qa-locusq/locusq_qa_artefacts/locusq_qa"
+          if [ ! -x "${LOCUSQ_QA_BIN}" ]; then
+            LOCUSQ_QA_BIN="./build-qa-locusq/locusq_qa_artefacts/Release/locusq_qa"
+          fi
+          if [ ! -x "${LOCUSQ_QA_BIN}" ]; then
+            echo "Unable to find locusq_qa executable" >&2
+            find build-qa-locusq -maxdepth 5 -name locusq_qa -type f || true
+            exit 1
+          fi
+
+          "${LOCUSQ_QA_BIN}" plugins/LocusQ/qa/scenarios/locusq_smoke_suite.json | tee qa_output/ci_smoke_suite.log
+          "${LOCUSQ_QA_BIN}" --spatial plugins/LocusQ/qa/scenarios/locusq_phase_2_6_acceptance_suite.json | tee qa_output/ci_phase_2_6_acceptance_suite.log
+          "${LOCUSQ_QA_BIN}" --spatial plugins/LocusQ/qa/scenarios/locusq_phase_2_5_acceptance_suite.json | tee qa_output/ci_phase_2_5_regression_suite.log
+          "${LOCUSQ_QA_BIN}" --spatial plugins/LocusQ/qa/scenarios/locusq_phase_2_8_output_layout_mono_suite.json | tee qa_output/ci_phase_2_8_output_layout_mono_suite.log
+          "${LOCUSQ_QA_BIN}" --spatial plugins/LocusQ/qa/scenarios/locusq_phase_2_8_output_layout_stereo_suite.json | tee qa_output/ci_phase_2_8_output_layout_stereo_suite.log
+          "${LOCUSQ_QA_BIN}" --spatial plugins/LocusQ/qa/scenarios/locusq_phase_2_8_output_layout_quad_suite.json | tee qa_output/ci_phase_2_8_output_layout_quad_suite.log
+          "${LOCUSQ_QA_BIN}" --spatial plugins/LocusQ/qa/scenarios/locusq_phase_2_9_renderer_cpu_suite.json | tee qa_output/ci_phase_2_9_renderer_cpu_suite.log
+          "${LOCUSQ_QA_BIN}" --spatial plugins/LocusQ/qa/scenarios/locusq_phase_2_11_snapshot_migration_suite.json | tee qa_output/ci_phase_2_11_snapshot_migration_suite.log
+
+          "${LOCUSQ_QA_BIN}" --spatial plugins/LocusQ/qa/scenarios/locusq_renderer_spatial_output.json --channels 4 | tee qa_output/ci_renderer_spatial_output_quad4.log
+          "${LOCUSQ_QA_BIN}" plugins/LocusQ/qa/scenarios/locusq_smoke_suite.json --channels 4 | tee qa_output/ci_smoke_suite_quad4.log
+
+          "${LOCUSQ_QA_BIN}" --spatial --sample-rate 96000 plugins/LocusQ/qa/scenarios/locusq_26_host_edge_roundtrip_multipass.json | tee qa_output/ci_phase_2_6_host_edge_96k_ch2.log
+          "${LOCUSQ_QA_BIN}" --spatial --sample-rate 96000 --channels 4 plugins/LocusQ/qa/scenarios/locusq_26_host_edge_roundtrip_multipass.json | tee qa_output/ci_phase_2_6_host_edge_96k_ch4.log
+
+          if [[ "${RUNNER_OS}" == "macOS" ]]; then
+            for pair in "44100 256" "48000 512" "48000 1024" "96000 512"; do
+              set -- ${pair}
+              "${LOCUSQ_QA_BIN}" --spatial --sample-rate "$1" --block-size "$2" plugins/LocusQ/qa/scenarios/locusq_26_host_edge_roundtrip_multipass.json | tee "qa_output/ci_phase_2_6_host_edge_${1}_${2}_ch2.log"
+              "${LOCUSQ_QA_BIN}" --spatial --sample-rate "$1" --block-size "$2" --channels 4 plugins/LocusQ/qa/scenarios/locusq_26_host_edge_roundtrip_multipass.json | tee "qa_output/ci_phase_2_6_host_edge_${1}_${2}_ch4.log"
+            done
+
+            "${LOCUSQ_QA_BIN}" --spatial --sample-rate 48000 --block-size 512 plugins/LocusQ/qa/scenarios/locusq_26_full_system_cpu_draft.json | tee qa_output/ci_phase_2_6_full_system_48k_512_ch2.log
+            "${LOCUSQ_QA_BIN}" --spatial --sample-rate 48000 --block-size 512 --channels 4 plugins/LocusQ/qa/scenarios/locusq_26_full_system_cpu_draft.json | tee qa_output/ci_phase_2_6_full_system_48k_512_ch4.log
+          fi
+
+      - name: Verify QA result statuses
+        run: |
+          python3 - <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          bad = []
+          seen = 0
+          for result in pathlib.Path("qa_output").rglob("result.json"):
+              seen += 1
+              try:
+                  payload = json.loads(result.read_text(encoding="utf-8"))
+              except Exception as exc:
+                  bad.append((str(result), f"PARSE_ERROR:{exc}"))
+                  continue
+              status = str(payload.get("status", "")).upper()
+              if status in ("FAIL", "ERROR"):
+                  bad.append((str(result), status))
+
+          if seen == 0:
+              print("No scenario result.json files found under qa_output.")
+              sys.exit(1)
+          if bad:
+              print("Found failing QA scenario results:")
+              for path, status in bad:
+                  print(f"  {status}: {path}")
+              sys.exit(1)
+          print("All scenario result.json statuses are PASS/WARN/SKIP.")
+          PY
+
+      - name: Publish CI summary
+        if: always()
+        run: |
+          bash audio-dsp-qa-harness/scripts/publish_ci_summary.sh qa_output/locusq_spatial/report/ci_summary.md || true
+          bash audio-dsp-qa-harness/scripts/publish_ci_summary.sh qa_output/locusq_emitter/report/ci_summary.md || true
+
+      - name: Upload QA artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: locusq-qa-critical-${{ matrix.os }}
+          path: |
+            qa_output/
+            build-qa-locusq/locusq_qa_artefacts/
+            build-qa-locusq/CMakeCache.txt
+          retention-days: 21
+
+  qa-pluginval-seeded-stress:
+    name: QA Pluginval Seeded Stress (macOS)
+    needs: qa-critical
+    runs-on: macos-latest
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          token: ${{ secrets.SUBMODULE_TOKEN != '' && secrets.SUBMODULE_TOKEN || github.token }}
+
+      - name: Checkout JUCE
+        uses: actions/checkout@v4
+        with:
+          repository: juce-framework/JUCE
+          path: JUCE
+
+      - name: Configure plugin build
+        run: |
+          cmake -S plugins/LocusQ -B build-pluginval \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DJUCE_DIR="${GITHUB_WORKSPACE}/JUCE"
+
+      - name: Build VST3 target for pluginval stress
+        run: cmake --build build-pluginval --target LocusQ_VST3 -j 4
+
+      - name: Install pluginval (macOS release)
+        run: |
+          set -euo pipefail
+          mkdir -p _tools/pluginval-ci
+          downloaded=0
+          for url in \
+            "https://github.com/Tracktion/pluginval/releases/latest/download/pluginval_macOS.zip" \
+            "https://github.com/Tracktion/pluginval/releases/latest/download/pluginval_mac.zip"; do
+            if curl -L --fail -o /tmp/pluginval_macOS.zip "${url}"; then
+              downloaded=1
+              break
+            fi
+          done
+          if [[ "${downloaded}" -ne 1 ]]; then
+            echo "Failed to download pluginval macOS release archive" >&2
+            exit 1
+          fi
+          unzip -q -o /tmp/pluginval_macOS.zip -d _tools/pluginval-ci
+
+          PLUGINVAL_BIN="$(find _tools/pluginval-ci -type f -path '*pluginval.app/Contents/MacOS/pluginval' | head -n 1)"
+          if [[ -z "${PLUGINVAL_BIN}" ]]; then
+            echo "pluginval binary not found after extraction" >&2
+            find _tools/pluginval-ci -maxdepth 6 -type f | sed -n '1,120p'
+            exit 1
+          fi
+          echo "PLUGINVAL_BIN=${PLUGINVAL_BIN}" >> "${GITHUB_ENV}"
+
+      - name: Run seeded pluginval stress
+        run: |
+          set -euo pipefail
+          mkdir -p qa_output/pluginval_seeded_stress
+
+          PLUGIN_PATH="./build-pluginval/LocusQ_artefacts/VST3/LocusQ.vst3"
+          if [[ ! -d "${PLUGIN_PATH}" ]]; then
+            PLUGIN_PATH="./build-pluginval/LocusQ_artefacts/Release/VST3/LocusQ.vst3"
+          fi
+          if [[ ! -d "${PLUGIN_PATH}" ]]; then
+            PLUGIN_PATH="$(find build-pluginval -maxdepth 7 -name 'LocusQ.vst3' -type d | head -n 1)"
+          fi
+          if [[ -z "${PLUGIN_PATH}" || ! -d "${PLUGIN_PATH}" ]]; then
+            echo "Unable to find built LocusQ.vst3 for pluginval" >&2
+            find build-pluginval -maxdepth 7 -name LocusQ.vst3 -type d || true
+            exit 1
+          fi
+
+          STATUS_TSV="qa_output/pluginval_seeded_stress/status.tsv"
+          printf "seed\texit_code\tlog\n" > "${STATUS_TSV}"
+
+          failures=0
+          for seed in 0x2a331c6 0x2a331c7 0x2a331c8 0x2a331c9 0x2a331ca; do
+            log_file="qa_output/pluginval_seeded_stress/pluginval_seed_${seed}.log"
+            set +e
+            "${PLUGINVAL_BIN}" \
+              --strictness-level 5 \
+              --validate-in-process \
+              --skip-gui-tests \
+              --random-seed "${seed}" \
+              "${PLUGIN_PATH}" > "${log_file}" 2>&1
+            exit_code=$?
+            set -e
+
+            printf "%s\t%s\t%s\n" "${seed}" "${exit_code}" "${log_file}" | tee -a "${STATUS_TSV}"
+            if [[ "${exit_code}" -ne 0 ]]; then
+              failures=$((failures + 1))
+            fi
+          done
+
+          if [[ "${failures}" -ne 0 ]]; then
+            echo "Seeded pluginval stress failed for ${failures} seed(s)." >&2
+            exit 1
+          fi
+
+      - name: Upload pluginval seeded stress artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: locusq-pluginval-seeded-stress
+          path: |
+            qa_output/pluginval_seeded_stress/
+            build-pluginval/LocusQ_artefacts/
+            build-pluginval/CMakeCache.txt
+          retention-days: 21

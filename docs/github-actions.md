@@ -62,6 +62,35 @@ platforms: windows
 - Runs on all three platforms simultaneously
 - Posts build summary to PR
 
+### 3. Docs Freshness (`docs-freshness.yml`)
+
+**Purpose:** Enforce parent snapshot/docs synchronization for active LocusQ closeout state.
+
+**Triggers:**
+- Pull request to `main`, `master`, or `develop` (when LocusQ/docs freshness files change)
+- Push to `main`, `master`, or `develop` (same paths)
+- Manual workflow dispatch
+
+**Gate checks:**
+1. Root README has an `Active Plugin Snapshot (LocusQ)` section
+2. Root CHANGELOG includes a snapshot refresh entry for the same date
+3. `plugins/LocusQ` submodule pointer resolves and tracks `.gitmodules` branch `main`
+4. LocusQ submodule docs freshness script passes
+
+### 4. LocusQ QA Harness (Parent) (`locusq-qa-harness.yml`)
+
+**Purpose:** Run parent-repo CI evidence closeout gates for LocusQ submodule updates.
+
+**Triggers:**
+- Pull request to `main`, `master`, or `develop` (LocusQ and closeout gate paths)
+- Push to `main`, `master`, or `develop` (same paths)
+- Manual workflow dispatch
+
+**Jobs:**
+1. `docs-closeout-gate` (Ubuntu): runs `scripts/validate-docs-freshness.sh`
+2. `qa-critical` (Ubuntu + macOS matrix): builds `locusq_qa`, runs critical suites, 4-channel regression lanes, and verifies `result.json` statuses
+3. `qa-pluginval-seeded-stress` (macOS): builds `LocusQ_VST3` and executes deterministic pluginval seed sweep (`0x2a331c6`..`0x2a331ca`)
+
 ## Build Jobs
 
 ### Windows Build

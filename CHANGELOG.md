@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **LocusQ parent closeout automation (Phase 2.9b)**
+  - Added parent CI workflow: `.github/workflows/locusq-qa-harness.yml`
+  - Added parent docs freshness gate: `.github/workflows/docs-freshness.yml`
+  - Added root automation script: `scripts/validate-docs-freshness.sh`
+  - Added parent-level checks for LocusQ submodule pointer alignment and docs evidence freshness
+
 - **FFGL Bridge Template** (from PR #2 by 12Matt3r)
   - FreeFrameGL 2.0 plugin template for VJ software (Resolume, VDMX, TouchDesigner)
   - JUCE 8 integration with parameter handling via `AudioProcessorValueTreeState`
@@ -73,6 +79,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Automatic releases on git tags
 
 ### Changed
+- Root LocusQ snapshot refreshed to 2026-02-19 (parent README/CHANGELOG + docs freshness guardrails).
 - **Template folder consolidation**
   - Moved all templates from `.agent/templates/`, `.claude/templates/`, `.kilocode/templates/` to root `templates/`
   - Updated all references in skill files, workflows, and troubleshooting docs to point to root `templates/`
